@@ -23,10 +23,28 @@ from eval.agreement_metrics import (
 from eval.coverage_metrics import axis_coverage, category_coverage, response_axis_coverage
 from eval.drift_metrics import score_distribution
 from eval.edge_case_clustering import cluster_edge_cases
+from scripts.seed_demo_annotations import main as seed_demo_annotations
+
+
+def ensure_demo_data(db_path: str) -> None:
+    if Path(db_path).exists():
+        return
+    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+    previous_db_path = os.environ.get("ANNOTATION_DB_PATH")
+    os.environ["ANNOTATION_DB_PATH"] = db_path
+    try:
+        seed_demo_annotations()
+    finally:
+        if previous_db_path is None:
+            os.environ.pop("ANNOTATION_DB_PATH", None)
+        else:
+            os.environ["ANNOTATION_DB_PATH"] = previous_db_path
 
 
 def load_data():
-    engine = db_engine(os.getenv("ANNOTATION_DB_PATH", "data/annotations.db"))
+    db_path = os.getenv("ANNOTATION_DB_PATH", "data/annotations.db")
+    ensure_demo_data(db_path)
+    engine = db_engine(db_path)
     rubric = load_rubric("docs/RUBRIC.md")
     return engine, rubric, responses_df(engine), annotations_df(engine)
 
