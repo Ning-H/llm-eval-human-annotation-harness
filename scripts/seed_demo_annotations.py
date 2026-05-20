@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+# ruff: noqa: E402
 import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from dotenv import load_dotenv
 from sqlalchemy import update
 from sqlalchemy.orm import sessionmaker
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+load_dotenv()
 
 from annotation.annotation_store import (
     AdjudicationEvent,

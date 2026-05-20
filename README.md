@@ -56,6 +56,8 @@ Create `.env` from `.env.example` and set:
 ```bash
 ANTHROPIC_API_KEY=...
 OPENAI_API_KEY=...
+ANTHROPIC_MODEL=claude-haiku-4-5-20251001
+OPENAI_MODEL=gpt-5-nano
 ```
 
 Then run:
@@ -72,6 +74,37 @@ OPENAI_MODEL=gpt-5-nano
 ```
 
 If a key is missing, that provider falls back to deterministic offline responses.
+
+## Configuration
+
+Local development reads environment variables from `.env` through `python-dotenv`.
+The committed `.env.example` is the template; `.env` is gitignored and should hold
+your local secrets.
+
+For Streamlit Community Cloud, add the same variables in:
+
+```text
+App settings -> Secrets
+```
+
+Use this format:
+
+```toml
+ANTHROPIC_API_KEY = "..."
+OPENAI_API_KEY = "..."
+ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
+OPENAI_MODEL = "gpt-5-nano"
+ANNOTATION_DB_PATH = "data/annotations.db"
+RATER_ID = "demo_rater"
+ADJUDICATOR_ID = "lead_reviewer"
+```
+
+No secrets are required for the public demo because missing API keys trigger the
+offline generator. Real API keys are only needed when you run:
+
+```bash
+python -m generation.generate_responses
+```
 
 ## Project Structure
 

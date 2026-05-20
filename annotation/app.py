@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+# ruff: noqa: E402
 import os
 import sys
 from pathlib import Path
 
 import streamlit as st
+from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+load_dotenv()
 
 from annotation.annotation_store import (
     append_response_rating,
