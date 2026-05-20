@@ -13,15 +13,20 @@ if __package__ is None or __package__ == "":
 
 from generation.response_store import get_engine, init_response_db, upsert_prompt, upsert_response
 
-MODELS = [
-    ("anthropic", "claude-3-5-haiku-latest"),
-    ("openai", "gpt-4o-mini"),
-]
+DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
+DEFAULT_OPENAI_MODEL = "gpt-5-nano"
 
 
 def load_prompts(path: Path) -> list[dict]:
     with path.open() as handle:
         return [json.loads(line) for line in handle if line.strip()]
+
+
+def configured_models() -> list[tuple[str, str]]:
+    return [
+        ("anthropic", os.getenv("ANTHROPIC_MODEL", DEFAULT_ANTHROPIC_MODEL)),
+        ("openai", os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL)),
+    ]
 
 
 def offline_response(prompt: str, provider: str, category: str) -> str:
@@ -100,18 +105,27 @@ def main() -> None:
     load_dotenv()
     engine = get_engine(args.db)
     init_response_db(engine)
+    prompt_records = load_prompts(Path(args.prompts))
+    models = configured_models()
 
-    for record in load_prompts(Path(args.prompts)):
+    for record in prompt_records:
+        prompt_text = record.get("prompt") or record.get("prompt_text")
+        metadata_json = {
+            key: value
+            for key, value in record.items()
+            if key not in {"prompt_id", "category", "source", "prompt", "prompt_text"}
+        }
         upsert_prompt(
             engine,
             prompt_id=record["prompt_id"],
             category=record["category"],
             source=record["source"],
-            prompt_text=record["prompt"],
+            prompt_text=prompt_text,
+            metadata_json=metadata_json,
         )
-        for provider, model in MODELS:
+        for provider, model in models:
             text, mode = generate_one(
-                record["prompt"],
+                prompt_text,
                 provider=provider,
                 model=model,
                 category=record["category"],
@@ -120,7 +134,7 @@ def main() -> None:
             response_id = f"{record['prompt_id']}::{provider}::{model}"
             upsert_response(engine, response_id, record["prompt_id"], provider, model, text, mode)
 
-    print(f"Wrote {len(load_prompts(Path(args.prompts))) * len(MODELS)} responses to {args.db}")
+    print(f"Wrote {len(prompt_records) * len(models)} responses to {args.db}")
 
 
 if __name__ == "__main__":

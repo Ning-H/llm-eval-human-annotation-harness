@@ -8,7 +8,7 @@ The demo uses a single rater with re-rating to estimate test-retest reliability.
 
 ## Methodology
 
-The source prompt set is curated across helpfulness, safety, factuality, formatting, and missing-context cases. Each prompt can receive responses from multiple providers. The included offline generator creates deterministic baseline responses so the project can be reviewed without API keys; when API keys are present, the generator can call Anthropic and OpenAI models.
+The source prompt set is sampled from the public `Anthropic/hh-rlhf` dataset on Hugging Face, using `helpful-base` and `harmless-base` examples. Each prompt can receive responses from multiple providers. The included offline generator creates deterministic baseline responses so the project can be reviewed without API keys; when API keys are present, the generator can call low-cost Anthropic and OpenAI models.
 
 Each model response is rated on five independent axes:
 
@@ -69,4 +69,4 @@ The key production principle is unchanged: disagreement is a signal to inspect p
 
 ## Honest Limitations
 
-This is a single-rater proof of methodology. It uses public or synthetic data, not consumer data. Real-time quality detection is implemented as SQL queries over local SQLite; a production implementation would use a streaming or warehouse-backed pipeline.
+This is a single-rater proof of methodology. It uses public benchmark-style data, not private consumer data. Real-time quality detection is implemented as SQL queries over local SQLite; a production implementation would use a streaming or warehouse-backed pipeline.

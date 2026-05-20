@@ -1,13 +1,33 @@
 # Prompt Curation Notes
 
-The seed prompt set is a compact HH-RLHF-inspired demo corpus. It is synthetic rather than copied from a benchmark so the repository stays self-contained and easy to publish.
+The default prompt file is generated from the public
+`Anthropic/hh-rlhf` dataset on Hugging Face. The ingestion script samples
+from:
 
-Coverage goals:
+- `helpful-base`
+- `harmless-base`
 
-- Helpfulness: ordinary assistant tasks where directness and completeness matter.
-- Factuality: basic technical explanations with verifiable claims.
-- Safety and refusal: prompts that test harmful compliance and safe redirection.
-- Format adherence: prompts with explicit output constraints.
-- Missing context: prompts that should trigger `context-required` handling.
+The source records include chosen/rejected assistant responses. For this
+project, the model-evaluation input is the conversation context up to the
+final assistant turn. The chosen/rejected responses are retained as metadata
+so the project can later export preference pairs or compare fresh model
+outputs against public reference answers.
 
-The architecture supports replacing this file with HELM, Anthropic HH-RLHF, or internal proprietary prompts as long as records include `prompt_id`, `category`, `source`, and `prompt`.
+Regenerate the prompt file with:
+
+```bash
+python ingestion/load_hh_rlhf.py --limit 50 --output prompts/source_prompts.jsonl
+```
+
+Each JSONL row includes:
+
+- `prompt_id`
+- `category`
+- `source`
+- `prompt`
+- `reference_chosen`
+- `reference_rejected`
+- `risk_tags`
+
+This keeps the demo public, reproducible, and closer to a real evaluation
+workflow than synthetic prompts.

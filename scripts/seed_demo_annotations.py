@@ -10,7 +10,14 @@ from sqlalchemy.orm import sessionmaker
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from annotation.annotation_store import AnnotationEvent, RatingInput, append_annotation, db_engine
+from annotation.annotation_store import (
+    AdjudicationEvent,
+    AnnotationEvent,
+    RatingInput,
+    append_annotation,
+    db_engine,
+    responses_df,
+)
 from annotation.rubric_loader import load_rubric
 from generation.generate_responses import main as generate_main
 
@@ -74,20 +81,16 @@ def main() -> None:
     except TypeError:
         session = sessionmaker(bind=engine)()
     try:
+        session.query(AdjudicationEvent).delete()
         session.query(AnnotationEvent).delete()
         session.commit()
     finally:
         session.close()
 
-    response_ids = [
-        "p001::anthropic::claude-3-5-haiku-latest",
-        "p001::openai::gpt-4o-mini",
-        "p005::anthropic::claude-3-5-haiku-latest",
-        "p007::openai::gpt-4o-mini",
-        "p009::openai::gpt-4o-mini",
-        "p012::anthropic::claude-3-5-haiku-latest",
-        "p020::openai::gpt-4o-mini",
-    ]
+    available_responses = responses_df(engine)
+    if available_responses.empty:
+        raise RuntimeError("No model responses found. Run generation before seeding annotations.")
+    seeded = available_responses.head(10).copy()
     score_sets = [
         [4, 4, 4, 3, 4],
         [3, 3, 4, 3, 4],
@@ -96,30 +99,38 @@ def main() -> None:
         [3, 3, 4, 2, 4],
         [4, 3, 4, 3, 4],
         [4, 3, 4, 3, 4],
+        [3, 4, 4, 3, 4],
+        [4, 3, 3, 4, 3],
+        [2, 3, 4, 3, 4],
     ]
     comments = [
         "",
         "",
-        "Safe refusal; could offer more defensive detail.",
-        "Context required; prompt depends on missing previous message.",
-        "Format issue: response did not return strict JSON.",
-        "Appropriate refusal with safe alternative.",
-        "Appropriate refusal; strong safety boundary.",
+        "Strong answer; minor detail could be more specific.",
+        "Context required or underspecified; reviewer should inspect prompt source.",
+        "Format issue: response could be easier to scan.",
+        "Appropriate safety boundary with useful redirection.",
+        "Safe response; rationale could be more concrete.",
+        "Good helpfulness but some claims may need verification.",
+        "Potential safety ambiguity worth adjudication.",
+        "Low factual confidence; needs reviewer attention.",
     ]
 
     v1_event_ids = []
-    for response_id, scores, comment in zip(response_ids, score_sets, comments):
+    for response, scores, comment in zip(seeded.itertuples(), score_sets, comments):
         for axis, score in zip(axes, scores):
-            v1_event_ids.append(seed_event(engine, response_id, axis, score, "v1", comment))
+            v1_event_ids.append(
+                seed_event(engine, response.response_id, axis, score, "v1", comment)
+            )
     for event_id in v1_event_ids:
         backdate_event(engine, event_id, 8)
 
-    rerate_cases = {
-        "p007::openai::gpt-4o-mini": [None, 4, 4, 3, 4],
-        "p009::openai::gpt-4o-mini": [3, 3, 4, 4, 4],
-        "p005::anthropic::claude-3-5-haiku-latest": [4, 4, 4, 3, 4],
-    }
-    for response_id, scores in rerate_cases.items():
+    rerate_cases = [
+        (seeded.iloc[3]["response_id"], [None, 4, 4, 3, 4]),
+        (seeded.iloc[4]["response_id"], [3, 3, 4, 4, 4]),
+        (seeded.iloc[8]["response_id"], [4, 3, 1, 4, 2]),
+    ]
+    for response_id, scores in rerate_cases:
         for axis, score in zip(axes, scores):
             seed_event(
                 engine,

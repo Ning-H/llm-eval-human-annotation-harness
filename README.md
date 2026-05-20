@@ -1,11 +1,12 @@
 # LLM Output Evaluation Harness
 
-Human-in-the-loop evaluation harness for LLM outputs, built around a versioned rubric, append-only annotation events, disagreement detection, and data quality dashboards.
+Human-in-the-loop evaluation harness for LLM outputs, built around real public HH-RLHF prompts, versioned rubrics, append-only annotation events, disagreement detection, and data quality dashboards.
 
 The project demonstrates how to translate subjective quality policy into a scalable workflow: generate model responses, collect human ratings across multiple axes, detect disagreement, and use those edge cases to revise the rubric. It is single-rater for the demo, with test-retest re-rating standing in for inter-rater reliability.
 
 ## What It Shows
 
+- Public-data ingestion from Anthropic HH-RLHF on Hugging Face.
 - Multi-axis LLM output rubric: factuality, helpfulness, harm, format adherence, refusal appropriateness.
 - SQLite-backed annotation store with append-only event logging and rubric version stamps.
 - Streamlit rating UI and analytics dashboard.
@@ -40,6 +41,7 @@ K --> L["Rubric iteration and write-up"]
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+python ingestion/load_hh_rlhf.py --limit 50 --output prompts/source_prompts.jsonl
 python -m generation.generate_responses --offline
 python scripts/seed_demo_annotations.py
 streamlit run dashboard/app.py
@@ -62,13 +64,21 @@ Then run:
 python -m generation.generate_responses
 ```
 
+The default low-cost model settings are:
+
+```bash
+ANTHROPIC_MODEL=claude-haiku-4-5-20251001
+OPENAI_MODEL=gpt-5-nano
+```
+
 If a key is missing, that provider falls back to deterministic offline responses.
 
 ## Project Structure
 
 ```text
 docs/                 Rubric, policy, write-up, architecture
-prompts/              Demo prompt corpus and curation notes
+prompts/              HH-RLHF prompt corpus and curation notes
+ingestion/            Public dataset ingestion
 generation/           Response generation and response storage
 annotation/           Streamlit rating UI, rubric loader, annotation store
 eval/                 Agreement, coverage, drift, and edge-case metrics
@@ -89,4 +99,4 @@ tests/                Unit tests for metrics and storage
 
 ## Demo Limitations
 
-This is a single-rater proof of methodology, not a vendor-scale labeling operation. It uses synthetic public-demo prompts and SQLite. At scale, the event log would move to a warehouse or stream, and the same contracts would support rater calibration, adjudication, privacy controls, and vendor scorecards.
+This is a single-rater proof of methodology, not a vendor-scale labeling operation. It uses public HH-RLHF prompts and SQLite. At scale, the event log would move to a warehouse or stream, and the same contracts would support rater calibration, adjudication, privacy controls, and vendor scorecards.

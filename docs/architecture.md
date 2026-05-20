@@ -2,7 +2,7 @@
 
 ```mermaid
 flowchart TD
-    A["Public prompt set"] --> B["Response generation"]
+    A["Anthropic HH-RLHF prompts"] --> B["Response generation"]
     B --> C["SQLite responses table"]
     C --> D["Streamlit annotation UI"]
     E["Versioned RUBRIC.md"] --> D
