@@ -2,6 +2,8 @@
 
 Human-in-the-loop evaluation harness for LLM outputs, built around real public HH-RLHF prompts, versioned rubrics, append-only annotation events, disagreement detection, and data quality dashboards.
 
+**Live demo:** [llm-eval-human-annotation-harness-ning.streamlit.app](https://llm-eval-human-annotation-harness-ning.streamlit.app/)
+
 The project demonstrates how to translate subjective quality policy into a scalable workflow: generate model responses, collect human ratings across multiple axes, detect disagreement, and use those edge cases to revise the rubric. It is single-rater for the demo, with test-retest re-rating standing in for inter-rater reliability.
 
 ## What It Shows
