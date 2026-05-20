@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -10,10 +11,18 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from annotation.annotation_store import annotations_df, db_engine, responses_df
+from annotation.annotation_store import (
+    AdjudicationInput,
+    adjudications_df,
+    annotations_df,
+    append_adjudication,
+    db_engine,
+    responses_df,
+)
 from annotation.app import render_rating_form
 from annotation.disagreement_detector import detect_disagreements, review_reasons
 from annotation.rubric_loader import load_rubric
+from eval.adjudication import adjudication_queue
 from eval.agreement_metrics import (
     cohen_kappa_by_axis,
     ordinal_krippendorff_alpha,
@@ -21,8 +30,11 @@ from eval.agreement_metrics import (
     score_correlation,
 )
 from eval.coverage_metrics import axis_coverage, category_coverage, response_axis_coverage
+from eval.dataset_diagnostics import dataset_quality_diagnostics, diagnostic_summary
 from eval.drift_metrics import score_distribution
 from eval.edge_case_clustering import cluster_edge_cases
+from eval.reports import launch_readiness_report
+from eval.scorecards import model_axis_scorecard, model_readiness_scorecard
 from scripts.seed_demo_annotations import main as seed_demo_annotations
 
 
@@ -46,7 +58,7 @@ def load_data():
     ensure_demo_data(db_path)
     engine = db_engine(db_path)
     rubric = load_rubric("docs/RUBRIC.md")
-    return engine, rubric, responses_df(engine), annotations_df(engine)
+    return engine, rubric, responses_df(engine), annotations_df(engine), adjudications_df(engine)
 
 
 def page_rate(engine, rubric) -> None:
@@ -126,12 +138,187 @@ def page_metrics(rubric, responses: pd.DataFrame, events: pd.DataFrame) -> None:
         )
 
 
-def page_edge_cases(responses: pd.DataFrame, events: pd.DataFrame) -> None:
+def page_scorecards(responses: pd.DataFrame, events: pd.DataFrame) -> None:
+    st.header("Scorecards")
+    st.caption(
+        "Model-level quality views for launch-readiness conversations. "
+        "Scores come from the latest human rating per response and rubric axis."
+    )
+    readiness = model_readiness_scorecard(responses, events)
+    st.subheader("Model Readiness")
+    st.dataframe(readiness, use_container_width=True, hide_index=True)
+    if not readiness.empty:
+        st.plotly_chart(
+            px.bar(
+                readiness,
+                x="model_name",
+                y="overall_mean_score",
+                color="readiness",
+                hover_data=["low_score_rate", "safety_failure_rate"],
+            ),
+            use_container_width=True,
+        )
+
+    axis_card = model_axis_scorecard(responses, events)
+    st.subheader("Axis Scorecard")
+    st.dataframe(axis_card, use_container_width=True, hide_index=True)
+    if not axis_card.empty:
+        st.plotly_chart(
+            px.bar(
+                axis_card,
+                x="axis",
+                y="mean_score",
+                color="model_provider",
+                barmode="group",
+                facet_col="model_name",
+            ),
+            use_container_width=True,
+        )
+
+
+def page_diagnostics(rubric, responses: pd.DataFrame, events: pd.DataFrame) -> None:
+    st.header("Dataset Diagnostics")
+    st.caption(
+        "These checks separate prompt/data quality issues from model quality issues: "
+        "missing context, high-risk policy boundaries, and incomplete annotation coverage."
+    )
+    axes = [axis.key for axis in rubric.axes]
+    diagnostics = dataset_quality_diagnostics(responses, events, axes)
+    summary = diagnostic_summary(diagnostics)
+    st.subheader("Diagnostic Summary")
+    st.dataframe(summary, use_container_width=True, hide_index=True)
+    if not summary.empty:
+        st.plotly_chart(
+            px.bar(summary, x="issue", y="response_count"),
+            use_container_width=True,
+        )
+    st.subheader("Diagnostic Detail")
+    st.dataframe(diagnostics, use_container_width=True, hide_index=True)
+
+
+def score_choice(label: str) -> int | None:
+    return None if label == "N/A" else int(label)
+
+
+def page_adjudication(
+    engine,
+    rubric,
+    responses: pd.DataFrame,
+    events: pd.DataFrame,
+    adjudications: pd.DataFrame,
+) -> None:
+    st.header("Adjudication")
+    st.caption(
+        "Open review items come from disagreement and context-required signals. "
+        "Adjudication records the final quality decision and rationale."
+    )
+    queue = adjudication_queue(responses, events, adjudications)
+    c1, c2 = st.columns(2)
+    c1.metric("Open review items", len(queue))
+    c2.metric("Adjudicated items", len(adjudications))
+
+    if queue.empty:
+        st.success("No open adjudication items.")
+    else:
+        labels = [
+            f"{row.response_id} | {row.axis} | {row.reason} | {row.severity}"
+            for row in queue.itertuples()
+        ]
+        selected_label = st.selectbox("Review item", labels)
+        selected = queue.iloc[labels.index(selected_label)]
+        st.subheader("Prompt")
+        st.info(selected["prompt_text"])
+        st.subheader("Model Response")
+        st.write(selected["response_text"])
+        st.write(
+            {
+                "axis": selected["axis"],
+                "reason": selected["reason"],
+                "severity": selected["severity"],
+                "latest_scores": selected.get("latest_scores", ""),
+                "comments": selected.get("comments", ""),
+            }
+        )
+
+        with st.form(f"adjudicate::{selected['response_id']}::{selected['axis']}"):
+            adjudicator_id = st.text_input(
+                "Adjudicator ID", os.getenv("ADJUDICATOR_ID", "lead_reviewer")
+            )
+            final_score = st.radio("Final score", ["4", "3", "2", "1", "N/A"], horizontal=True)
+            resolution_type = st.selectbox(
+                "Resolution type",
+                ["rubric-ambiguity", "rater-error", "data-issue", "model-quality-issue"],
+            )
+            rationale = st.text_area("Rationale", placeholder="Why is this the final decision?")
+            submitted = st.form_submit_button("Save adjudication")
+
+        if submitted:
+            if not rationale.strip():
+                st.error("Add a rationale before saving adjudication.")
+                return
+            append_adjudication(
+                engine,
+                AdjudicationInput(
+                    response_id=selected["response_id"],
+                    axis=selected["axis"],
+                    adjudicator_id=adjudicator_id,
+                    final_score=score_choice(final_score),
+                    resolution_type=resolution_type,
+                    rationale=rationale,
+                    rubric_version=rubric.version,
+                ),
+            )
+            st.success("Adjudication saved.")
+            st.rerun()
+
+    st.subheader("Adjudication History")
+    st.dataframe(adjudications, use_container_width=True, hide_index=True)
+
+
+def page_reports(
+    rubric,
+    responses: pd.DataFrame,
+    events: pd.DataFrame,
+    adjudications: pd.DataFrame,
+) -> None:
+    st.header("Exports")
+    st.caption("Download production-style artifacts for model review and data quality follow-up.")
+    axes = [axis.key for axis in rubric.axes]
+    report = launch_readiness_report(responses, events, adjudications, axes)
+    st.subheader("Launch Readiness JSON")
+    st.json(report)
+    st.download_button(
+        "Download launch readiness JSON",
+        data=json.dumps(report, indent=2),
+        file_name="launch_readiness_report.json",
+        mime="application/json",
+    )
+    st.download_button(
+        "Download annotations CSV",
+        data=events.to_csv(index=False),
+        file_name="annotation_events.csv",
+        mime="text/csv",
+    )
+    st.download_button(
+        "Download adjudication CSV",
+        data=adjudications.to_csv(index=False),
+        file_name="adjudication_events.csv",
+        mime="text/csv",
+    )
+
+
+def page_edge_cases(
+    responses: pd.DataFrame,
+    events: pd.DataFrame,
+    adjudications: pd.DataFrame,
+) -> None:
     st.header("Edge Cases")
     st.subheader("Disagreement Flags")
     st.dataframe(detect_disagreements(events), use_container_width=True)
     st.subheader("Review Reasons")
     st.dataframe(review_reasons(events), use_container_width=True)
+    st.subheader("Open Adjudication Queue")
+    st.dataframe(adjudication_queue(responses, events, adjudications), use_container_width=True)
     st.subheader("Comment Clusters")
     st.dataframe(cluster_edge_cases(events, responses), use_container_width=True)
 
@@ -139,16 +326,36 @@ def page_edge_cases(responses: pd.DataFrame, events: pd.DataFrame) -> None:
 def main() -> None:
     st.set_page_config(page_title="LLM Eval Harness", layout="wide")
     st.title("LLM Output Evaluation Harness")
-    engine, rubric, responses, events = load_data()
-    page = st.sidebar.radio("Page", ["Rate", "Inputs", "Metrics", "Edge Cases"])
+    engine, rubric, responses, events, adjudications = load_data()
+    page = st.sidebar.radio(
+        "Page",
+        [
+            "Rate",
+            "Inputs",
+            "Metrics",
+            "Scorecards",
+            "Diagnostics",
+            "Adjudication",
+            "Edge Cases",
+            "Exports",
+        ],
+    )
     if page == "Rate":
         page_rate(engine, rubric)
     elif page == "Inputs":
         page_inputs(responses)
     elif page == "Metrics":
         page_metrics(rubric, responses, events)
+    elif page == "Scorecards":
+        page_scorecards(responses, events)
+    elif page == "Diagnostics":
+        page_diagnostics(rubric, responses, events)
+    elif page == "Adjudication":
+        page_adjudication(engine, rubric, responses, events, adjudications)
+    elif page == "Exports":
+        page_reports(rubric, responses, events, adjudications)
     else:
-        page_edge_cases(responses, events)
+        page_edge_cases(responses, events, adjudications)
 
 
 if __name__ == "__main__":

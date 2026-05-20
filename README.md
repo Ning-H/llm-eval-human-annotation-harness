@@ -11,6 +11,9 @@ The project demonstrates how to translate subjective quality policy into a scala
 - Streamlit rating UI and analytics dashboard.
 - Agreement metrics: exact agreement, Cohen's kappa, Krippendorff's alpha, Spearman score correlation.
 - Coverage, drift, disagreement, and edge-case clustering views.
+- Adjudication workflow for resolving disagreement and context-required cases.
+- Model readiness scorecards and dataset quality diagnostics.
+- Downloadable launch-readiness, annotation, and adjudication reports.
 - Policy docs and evaluation write-up suitable for a data quality interview portfolio.
 
 ## Architecture
@@ -21,12 +24,14 @@ flowchart TD
     B --> C["SQLite prompt and response tables"]
     C --> D["Streamlit rating UI"]
     E["docs/RUBRIC.md"] --> D
-    D --> F["Append-only annotation_events"]
-    F --> G["Agreement, coverage, and drift metrics"]
-    F --> H["Disagreement detector"]
-    G --> I["Streamlit dashboard"]
-    H --> I
-    I --> J["Rubric iteration and write-up"]
+D --> F["Append-only annotation_events"]
+F --> G["Agreement, coverage, and drift metrics"]
+F --> H["Disagreement detector"]
+H --> I["Adjudication queue"]
+I --> J["Final score and rationale"]
+G --> K["Scorecards and exports"]
+J --> K
+K --> L["Rubric iteration and write-up"]
 ```
 
 ## Quickstart
@@ -67,9 +72,20 @@ prompts/              Demo prompt corpus and curation notes
 generation/           Response generation and response storage
 annotation/           Streamlit rating UI, rubric loader, annotation store
 eval/                 Agreement, coverage, drift, and edge-case metrics
-dashboard/            Multi-page Streamlit dashboard
+dashboard/            Multi-page Streamlit dashboard, adjudication, reports
 tests/                Unit tests for metrics and storage
 ```
+
+## Dashboard Pages
+
+- **Rate**: score a model response against the current rubric.
+- **Inputs**: inspect prompt and model-response pairs.
+- **Metrics**: monitor agreement, coverage, and score distributions.
+- **Scorecards**: compare model/provider readiness by rubric axis.
+- **Diagnostics**: identify prompt/data quality risks such as missing context.
+- **Adjudication**: resolve disagreement or context-required cases with final decisions.
+- **Edge Cases**: inspect disagreement flags and comment clusters.
+- **Exports**: download launch-readiness, annotation, and adjudication artifacts.
 
 ## Demo Limitations
 

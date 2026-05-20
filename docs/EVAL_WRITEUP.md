@@ -45,6 +45,14 @@ The metrics layer computes:
 - Score drift between rubric versions.
 - Disagreement flags for score divergence of two or more points.
 
+The operational dashboard now also includes:
+
+- Adjudication queue for disagreement and context-required cases.
+- Final adjudication decisions with rationale, adjudicator ID, final score, and resolution type.
+- Model readiness scorecards by provider, model, and rubric axis.
+- Dataset diagnostics that identify prompt-side quality issues separately from model-side failures.
+- Exportable launch-readiness and annotation artifacts.
+
 ## Scaling to N Raters
 
 For 50 raters across vendors, the SQLite event log would become a warehouse table or streaming event topic. The same schema supports rater calibration, vendor-level quality dashboards, gold-item monitoring, adjudication queues, and rubric replay.

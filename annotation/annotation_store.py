@@ -56,6 +56,20 @@ class ReviewFlag(AnnotationBase):
     created_at = Column(DateTime(timezone=True), nullable=False)
 
 
+class AdjudicationEvent(AnnotationBase):
+    __tablename__ = "adjudication_events"
+
+    adjudication_id = Column(String, primary_key=True)
+    response_id = Column(String, nullable=False, index=True)
+    axis = Column(String, nullable=False, index=True)
+    adjudicator_id = Column(String, nullable=False, index=True)
+    final_score = Column(Integer, nullable=True)
+    resolution_type = Column(String, nullable=False)
+    rationale = Column(Text, nullable=False)
+    rubric_version = Column(String, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, index=True)
+
+
 @dataclass(frozen=True)
 class RatingInput:
     response_id: str
@@ -65,6 +79,17 @@ class RatingInput:
     rubric_version: str
     comment: str = ""
     context_required: bool = False
+
+
+@dataclass(frozen=True)
+class AdjudicationInput:
+    response_id: str
+    axis: str
+    adjudicator_id: str
+    final_score: int | None
+    resolution_type: str
+    rationale: str
+    rubric_version: str
 
 
 def init_annotation_db(engine: Engine) -> None:
@@ -140,8 +165,40 @@ def append_response_rating(
     ]
 
 
+def append_adjudication(engine: Engine, adjudication: AdjudicationInput) -> str:
+    if adjudication.final_score is not None and adjudication.final_score not in {1, 2, 3, 4}:
+        raise ValueError("final_score must be 1, 2, 3, 4, or None for N/A")
+    if not adjudication.rationale.strip():
+        raise ValueError("rationale is required")
+    adjudication_id = str(uuid4())
+    session = make_session(engine)
+    try:
+        session.add(
+            AdjudicationEvent(
+                adjudication_id=adjudication_id,
+                response_id=adjudication.response_id,
+                axis=adjudication.axis,
+                adjudicator_id=adjudication.adjudicator_id,
+                final_score=adjudication.final_score,
+                resolution_type=adjudication.resolution_type,
+                rationale=adjudication.rationale,
+                rubric_version=adjudication.rubric_version,
+                created_at=utc_now(),
+            )
+        )
+        session.commit()
+    finally:
+        session.close()
+    return adjudication_id
+
+
 def annotations_df(engine: Engine) -> pd.DataFrame:
     query = "select * from annotation_events order by created_at"
+    return pd.read_sql_query(query, engine)
+
+
+def adjudications_df(engine: Engine) -> pd.DataFrame:
+    query = "select * from adjudication_events order by created_at"
     return pd.read_sql_query(query, engine)
 
 
