@@ -32,11 +32,23 @@ def render_rating_form(engine, rubric: Rubric, rater_id: str, rerate_mode: bool 
         st.info("No eligible responses found for this mode.")
         return
 
-    st.caption(f"Rubric {rubric.version} | {response['category']} | {response['model_name']}")
-    st.subheader("Prompt")
-    st.write(response["prompt_text"])
-    st.subheader("Model Response")
-    st.write(response["response_text"])
+    st.caption(f"Rubric {rubric.version} | response_id: {response['response_id']}")
+    st.subheader("Evaluation Input")
+    meta_cols = st.columns(3)
+    meta_cols[0].metric("Prompt Category", response["category"])
+    meta_cols[1].metric("Model Provider", response["model_provider"])
+    meta_cols[2].metric("Model", response["model_name"])
+
+    prompt_col, response_col = st.columns(2)
+    with prompt_col:
+        st.markdown("#### Prompt")
+        st.info(response["prompt_text"])
+    with response_col:
+        st.markdown("#### Model Response")
+        st.write(response["response_text"])
+
+    st.divider()
+    st.subheader("Human Rubric Rating")
 
     with st.form(f"rating::{response['response_id']}"):
         scores: dict[str, int | None] = {}

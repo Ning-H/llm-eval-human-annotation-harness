@@ -51,9 +51,39 @@ def load_data():
 
 def page_rate(engine, rubric) -> None:
     st.header("Rate")
+    st.caption(
+        "This demo uses preloaded prompt and model-response pairs. "
+        "The human task is to evaluate each response against the rubric."
+    )
     rater_id = st.sidebar.text_input("Rater ID", os.getenv("RATER_ID", "demo_rater"))
     rerate_mode = st.sidebar.toggle("7-day re-rate mode")
     render_rating_form(engine, rubric, rater_id, rerate_mode)
+
+
+def page_inputs(responses: pd.DataFrame) -> None:
+    st.header("Inputs")
+    st.caption(
+        "These are the prompt and model-response pairs being evaluated. "
+        "In a production workflow, this table would come from benchmark prompts, "
+        "internal eval sets, or sampled production traffic."
+    )
+    display_cols = [
+        "prompt_id",
+        "category",
+        "model_provider",
+        "model_name",
+        "prompt_text",
+        "response_text",
+    ]
+    st.dataframe(
+        responses[display_cols],
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "prompt_text": st.column_config.TextColumn("Prompt", width="large"),
+            "response_text": st.column_config.TextColumn("Model Response", width="large"),
+        },
+    )
 
 
 def page_metrics(rubric, responses: pd.DataFrame, events: pd.DataFrame) -> None:
@@ -110,9 +140,11 @@ def main() -> None:
     st.set_page_config(page_title="LLM Eval Harness", layout="wide")
     st.title("LLM Output Evaluation Harness")
     engine, rubric, responses, events = load_data()
-    page = st.sidebar.radio("Page", ["Rate", "Metrics", "Edge Cases"])
+    page = st.sidebar.radio("Page", ["Rate", "Inputs", "Metrics", "Edge Cases"])
     if page == "Rate":
         page_rate(engine, rubric)
+    elif page == "Inputs":
+        page_inputs(responses)
     elif page == "Metrics":
         page_metrics(rubric, responses, events)
     else:
